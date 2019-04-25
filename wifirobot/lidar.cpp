@@ -32,8 +32,7 @@ void poll_sensor()
       send_message(lidar_message);
     } else {
       Serial.println(" out of range ");
-      send_message("-1")
+      send_message("-1");
     }
   }
 }
-
