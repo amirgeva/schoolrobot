@@ -31,7 +31,7 @@ void poll_sensor()
       sprintf(lidar_message,"%d",int(measure.RangeMilliMeter));
       send_message(lidar_message);
     } else {
-      Serial.println(" out of range ");
+      //Serial.println(" out of range ");
       send_message("-1");
     }
   }

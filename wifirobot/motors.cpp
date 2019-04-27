@@ -4,15 +4,28 @@
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 const int SERVO_CHANNEL=0;
 const int MOTOR_PWM_BASE=12;
-const int LEFT_ENCODER=D5;
-const int RIGHT_ENCODER=D6;
+const int LEFT_ENCODER=D6;
+const int RIGHT_ENCODER=D5;
 const int LED_PWM_BASE = 4;
 const int SERVO_MIN = 150;
 const int SERVO_MAX = 600;
 
-int left_last=LOW,right_last=LOW;
+int left_last=0,right_last=0;
+int left_dir=1,right_dir=1;
 int left_slits=0,right_slits=0;
 int left_limit=0,right_limit=0;
+
+
+void left_tick_isr()
+{
+  left_slits+=left_dir;
+}
+
+void right_tick_isr()
+{
+  right_slits+=right_dir;
+}
+
 
 void pwm_setup()
 {
@@ -21,6 +34,8 @@ void pwm_setup()
   pwm.begin();
   pwm.setPWMFreq(60);  // Analog servos run at ~60 Hz updates
   delay(10);
+  attachInterrupt(digitalPinToInterrupt(LEFT_ENCODER),left_tick_isr,RISING);
+  attachInterrupt(digitalPinToInterrupt(RIGHT_ENCODER),right_tick_isr,RISING);
 }
 
 void drive_motor(int ch, int a, int b)
@@ -29,26 +44,36 @@ void drive_motor(int ch, int a, int b)
   pwm.setPWM(ch+1, 0, b);
 }
 
-void drive_motor_channel(int offset, int v)
+void drive_motor_channel(int offset, int v, int* dir)
 {
-  if (v>0) drive_motor(MOTOR_PWM_BASE+offset,v,0);
-  else     drive_motor(MOTOR_PWM_BASE+offset,0,-v);
-}
-
-void drive(int l, int r)
-{
-  drive_motor_channel(0,l);
-  drive_motor_channel(2,r);
+  if (v>=0) 
+  {
+    drive_motor(MOTOR_PWM_BASE+offset,v,0);
+    *dir = 1;
+  }
+  else
+  {
+    drive_motor(MOTOR_PWM_BASE+offset,0,-v);
+    *dir = -1;
+  }
 }
 
 void drive_left(int v)
 {
-  drive_motor_channel(0,v);
+  drive_motor_channel(0,v,&left_dir);
+  if (v==0) left_slits=0;
 }
 
 void drive_right(int v)
 {
-  drive_motor_channel(2,v);
+  drive_motor_channel(2,v,&right_dir);
+  if (v==0) right_slits=0;
+}
+
+void drive(int l, int r)
+{
+  drive_left(l);
+  drive_right(r);
 }
 
 void process_drive_command(int* params, int n)
@@ -64,8 +89,8 @@ void process_drive_command(int* params, int n)
   Serial.println(params[1]);
   left_limit=9999;
   right_limit=9999;
-  left_slits=0;
-  right_slits=0;
+  //left_slits=0;
+  //right_slits=0;
   drive(params[0],params[1]);
 }
 
@@ -73,11 +98,11 @@ void process_step_command(int* params, int n)
 {
   if (n<4) return;
   Serial.println("Step");
-  left_limit=params[1];
-  right_limit=params[3];
-  left_slits=0;
-  right_slits=0;
+  //left_slits=0;
+  //right_slits=0;
   drive(params[0],params[2]);
+  left_limit=left_slits + left_dir * params[1];
+  right_limit=right_slits + right_dir * params[3];
 }
 
 void process_servo_command(int* params, int n)
@@ -98,6 +123,7 @@ void process_servo_command(int* params, int n)
 
 void poll_encoder(int pin, int* last, int* slits)
 {
+  /*
   int v=digitalRead(pin);
   if (v!=(*last))
   {
@@ -110,23 +136,33 @@ void poll_encoder(int pin, int* last, int* slits)
     if (v!=0) (*slits)++;
     Serial.println(*slits);
   }
+  */
 }
 
 void poll_encoders()
 {
-  poll_encoder(LEFT_ENCODER,&left_last,&left_slits);
-  poll_encoder(RIGHT_ENCODER,&right_last,&right_slits);
-  if (left_limit>0 && left_slits>=left_limit)
+  if (left_last!=left_slits || right_last!=right_slits)
+  {
+    Serial.print("Enc: ");
+    Serial.print(left_slits);
+    Serial.print("  ");
+    Serial.println(right_slits);
+    left_last=left_slits;
+    right_last=right_slits;
+  }
+  
+  //poll_encoder(LEFT_ENCODER,&left_last,&left_slits);
+  //poll_encoder(RIGHT_ENCODER,&right_last,&right_slits);
+  if (left_limit!=0 && abs(left_slits)>=abs(left_limit))
   {
     Serial.println("Stopping left (limit)");
     drive_left(0);
     left_limit=0;
   }
-  if (right_limit>0 && right_slits>=right_limit)
+  if (right_limit!=0 && abs(right_slits)>=abs(right_limit))
   {
     Serial.println("Stopping right (limit)");
     drive_right(0);
     right_limit=0;
   }
 }
-

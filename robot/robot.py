@@ -23,12 +23,13 @@ def check_ip():
 
 class Robot:
     def __init__(self):
-        if not check_ip():
-            print("Not connected to robot")
-            return
         self.done=False
         self.recv_thread=None
         self.sensor=-1
+        if not check_ip():
+            print("Not connected to robot")
+            self.done=True
+            return
         
     def cleanup(self):
         self.stop()
